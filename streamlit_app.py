@@ -26,40 +26,41 @@ def analyze_columns(df):
     product_cols = [c for c in cols if any(kw in c for kw in ['product', 'item', 'sku', 'part'])]
     analysis['product_col'] = product_cols[0] if product_cols else None
     
-    # Detect order info
-    order_cols = [c for c in cols if any(kw in c for kw in ['order', 'po', 'transaction'])]
-    analysis['order_col'] = order_cols[0] if order_cols else None
-    
     return analysis
 
 def auto_generate_insights(df, col_map):
     """Generate insights based on detected columns."""
     insights = []
+    processed_df = df.copy()
     
-    # Revenue calculation if we have quantity and price
-    if col_map['quantity_col'] and col_map['price_col']:
-        df['revenue'] = df[col_map['quantity_col'] * df[col_map['price_col']]
-        total_rev = df['revenue'].sum()
-        insights.append(f"Total Revenue: ${total_rev:,.2f}")
+    try:
+        # Revenue calculation if we have quantity and price
+        if col_map['quantity_col'] and col_map['price_col']:
+            processed_df['revenue'] = processed_df[col_map['quantity_col'] * processed_df[col_map['price_col']]
+            total_rev = processed_df['revenue'].sum()
+            insights.append(f"Total Revenue: ${total_rev:,.2f}")
+            
+            # Revenue by product if available
+            if col_map['product_col']:
+                product_rev = processed_df.groupby(col_map['product_col'])['revenue'].sum()
+                insights.append("\nRevenue by Product:")
+                for product, rev in product_rev.items():
+                    insights.append(f"- {product}: ${rev:,.2f}")
         
-        # Revenue by product if available
-        if col_map['product_col']:
-            product_rev = df.groupby(col_map['product_col'])['revenue'].sum()
-            insights.append("\nRevenue by Product:")
-            for product, rev in product_rev.items():
-                insights.append(f"- {product}: ${rev:,.2f}")
+        # Time trends if date available
+        if col_map['date_col']:
+            try:
+                processed_df['date'] = pd.to_datetime(processed_df[col_map['date_col']])
+                monthly = processed_df.resample('M', on='date')['revenue'].sum()
+                insights.append("\nMonthly Revenue Trend:")
+                insights.append(monthly.to_string())
+            except Exception as e:
+                insights.append(f"\nCould not analyze trends: {str(e)}")
+                
+    except Exception as e:
+        insights.append(f"Error during analysis: {str(e)}")
     
-    # Time trends if date available
-    if col_map['date_col']:
-        try:
-            df['date'] = pd.to_datetime(df[col_map['date_col']])
-            monthly = df.resample('M', on='date')['revenue'].sum()
-            insights.append("\nMonthly Revenue Trend:")
-            insights.append(monthly.to_string())
-        except:
-            pass
-    
-    return insights, df
+    return insights, processed_df
 
 def main():
     st.set_page_config("Smart Sales Analyzer", layout="wide")
@@ -76,7 +77,7 @@ def main():
             col_map = analyze_columns(df)
             
             st.subheader("Detected Columns:")
-            st.json(col_map)
+            st.write(col_map)
             
             # Generate and display insights
             insights, processed_df = auto_generate_insights(df, col_map)
@@ -97,7 +98,7 @@ def main():
             )
             
         except Exception as e:
-            st.error(f"Error: {str(e)}")
+            st.error(f"Error loading file: {str(e)}")
 
 if __name__ == "__main__":
     main()
