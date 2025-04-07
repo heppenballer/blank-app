@@ -94,13 +94,17 @@ def main():
     st.markdown("Upload your sales data to generate automated business insights.")
     
     # File uploader
-    uploaded_file = st.file_uploader("Choose an Excel file", type=["xlsx"], 
+    uploaded_file = st.file_uploader("Choose an Excel file", type=["xlsx", "xls"], 
                                    help="Upload your Team Project Excel file with sales data")
     
     if uploaded_file:
         try:
             with st.spinner('Processing data...'):
-                df = pd.read_excel(uploaded_file)
+                # Use openpyxl engine for xlsx files
+                if uploaded_file.name.endswith('.xlsx'):
+                    df = pd.read_excel(uploaded_file, engine='openpyxl')
+                else:
+                    df = pd.read_excel(uploaded_file)
                 
                 # Generate insights
                 revenue_metrics, df = calculate_revenue_metrics(df)
@@ -142,6 +146,17 @@ def main():
                     mime='text/csv'
                 )
                 
+        except ImportError:
+            st.error("""
+            ❌ Required package not found. Please install openpyxl by running:
+            ```
+            pip install openpyxl
+            ```
+            or
+            ```
+            pip install -r requirements.txt
+            ```
+            """)
         except Exception as e:
             st.error(f"❌ Error processing file: {str(e)}")
 
