@@ -91,18 +91,19 @@ def generate_product_insights(product_rev):
     
     return insights
 
-def generate_monthly_insights(monthly):
+def generate_monthly_insights(monthly_df):
     """Generate actionable business insights about monthly trends"""
     insights = []
     
-    if len(monthly) == 0:
+    if len(monthly_df) == 0:
         return ["No monthly revenue data available for analysis"]
     
-    monthly['Revenue'] = monthly['Revenue'].str.replace('$', '').str.replace(',', '').astype(float)
+    # Ensure we're working with numeric revenue values
+    monthly_df['Revenue'] = monthly_df['Revenue'].astype(float)
     
-    # Seasonal patterns
-    best_month = monthly.loc[monthly['Revenue'].idxmax()]
-    worst_month = monthly.loc[monthly['Revenue'].idxmin()]
+    # Best/worst month analysis
+    best_month = monthly_df.loc[monthly_df['Revenue'].idxmax()]
+    worst_month = monthly_df.loc[monthly_df['Revenue'].idxmin()]
     monthly_diff = best_month['Revenue'] - worst_month['Revenue']
     
     insights.append(
@@ -115,9 +116,9 @@ def generate_monthly_insights(monthly):
     )
     
     # Growth trends
-    if len(monthly) > 1:
-        monthly['Growth'] = monthly['Revenue'].pct_change() * 100
-        avg_growth = monthly['Growth'].mean()
+    if len(monthly_df) > 1:
+        monthly_df['Growth'] = monthly_df['Revenue'].pct_change() * 100
+        avg_growth = monthly_df['Growth'].mean()
         
         if avg_growth > 0:
             insights.append(
@@ -135,20 +136,6 @@ def generate_monthly_insights(monthly):
                 "- Assess competitive landscape\n"
                 "- Conduct customer feedback surveys"
             )
-    
-    # Quarterly planning
-    if len(monthly) >= 12:
-        quarterly = monthly.set_index('Month')['Revenue'].resample('Q').sum()
-        best_q = quarterly.idxmax().strftime('%Y-Q%q')
-        worst_q = quarterly.idxmin().strftime('%Y-Q%q')
-        
-        insights.append(
-            f"Quarterly performance shows strongest results in {best_q} and weakest in {worst_q}. "
-            "Planning suggestions:\n"
-            "- Align product launches with strong quarters\n"
-            "- Schedule maintenance/upgrades in slower periods\n"
-            "- Adjust quarterly sales targets accordingly"
-        )
     
     return insights
 
@@ -184,22 +171,24 @@ def auto_generate_insights(df, col_map):
             
             # Monthly insights
             if col_map['date_col']:
-                monthly = processed_df.resample('M', on=col_map['date_col'])['revenue'].sum().reset_index()
+                # Convert to datetime and set as index for resampling
+                processed_df['date'] = pd.to_datetime(processed_df[col_map['date_col']])
+                monthly = processed_df.set_index('date').resample('M')['revenue'].sum().reset_index()
                 monthly.columns = ['Month', 'Revenue']
                 monthly['Month'] = monthly['Month'].dt.strftime('%Y-%m')
-                monthly['Revenue'] = monthly['Revenue'].apply(lambda x: f"${x:,.2f}")
                 
-                # Generate and add monthly insights
+                # Create display version with formatted currency
+                monthly_display = monthly.copy()
+                monthly_display['Revenue'] = monthly_display['Revenue'].apply(lambda x: f"${x:,.2f}")
+                
+                # Generate and add monthly insights (using numeric values)
                 monthly_insights = generate_monthly_insights(monthly.copy())
                 insights.extend(monthly_insights)
                 
                 # Display monthly trends
                 st.subheader("Monthly Revenue Trend")
-                st.dataframe(monthly)
-                st.line_chart(
-                    monthly.assign(Revenue=monthly['Revenue'].str.replace('$', '').str.replace(',', '').astype(float))
-                    .set_index('Month')
-                )
+                st.dataframe(monthly_display)
+                st.line_chart(monthly.set_index('Month'))
     
     except Exception as e:
         insights.append(f"Analysis error: {str(e)}")
