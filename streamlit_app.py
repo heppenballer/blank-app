@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 from datetime import datetime
+pip install matplotlib
 
 def calculate_revenue_metrics(data):
     """Calculate revenue-related metrics."""
