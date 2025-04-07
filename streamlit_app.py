@@ -2,8 +2,14 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
+# Constants
+REQUIRED_COLUMNS = {
+    'Order Number', 'Part Number', 'Qty Shipped',
+    'Product Type', 'Pieces per Carton', 'Date Ordered', 'Price'
+}
+
 def check_dependencies():
-    """Check for required dependencies."""
+    """Check for required packages."""
     try:
         import openpyxl
         return True
@@ -27,6 +33,38 @@ def check_dependencies():
         ```
         """)
         return False
+
+def validate_columns(df):
+    """Check for required columns with flexible matching."""
+    # Check for exact matches first
+    missing_exact = REQUIRED_COLUMNS - set(df.columns)
+    if not missing_exact:
+        return True, df
+    
+    # Try case-insensitive and whitespace-insensitive matching
+    normalized_actual = {col.strip().lower(): col for col in df.columns}
+    normalized_required = {col.strip().lower(): col for col in REQUIRED_COLUMNS}
+    
+    matched_columns = {}
+    for req_norm, req_original in normalized_required.items():
+        if req_norm in normalized_actual:
+            matched_columns[normalized_actual[req_norm]] = req_original
+    
+    # Check if we found all columns
+    if len(matched_columns) == len(REQUIRED_COLUMNS):
+        df = df.rename(columns=matched_columns)
+        return True, df
+    
+    # Generate helpful error message
+    still_missing = REQUIRED_COLUMNS - set(matched_columns.values())
+    error_msg = f"""
+    ❌ Column matching failed. Missing or mismatched columns:
+    {', '.join(still_missing)}
+    
+    Your file contains:
+    {', '.join(df.columns)}
+    """
+    return False, error_msg
 
 def calculate_revenue_metrics(data):
     """Calculate revenue-related metrics."""
@@ -128,7 +166,7 @@ def display_visualizations(data):
 def main():
     # Page configuration
     st.set_page_config(
-        page_title="Quantivo Sales Analyzer",
+        page_title="Sales Analyzer Pro",
         layout="wide",
         initial_sidebar_state="expanded"
     )
@@ -152,11 +190,19 @@ def main():
                 padding: 2px 5px;
                 border-radius: 3px;
             }
+            .column-match {
+                color: #28a745;
+                font-weight: bold;
+            }
+            .column-mismatch {
+                color: #dc3545;
+                font-weight: bold;
+            }
         </style>
     """, unsafe_allow_html=True)
     
-    st.title('📊 Sales Data Analyzer')
-    st.markdown("Upload your sales Excel file to generate insights and visualizations.")
+    st.title('📊 Advanced Sales Analyzer')
+    st.markdown("Upload your sales Excel file to generate comprehensive insights")
     
     # File uploader
     uploaded_file = st.file_uploader(
@@ -177,17 +223,36 @@ def main():
             else:
                 df = pd.read_excel(uploaded_file)
             
-            # Data validation
-            required_cols = {
-                'Order Number', 'Part Number', 'Qty Shipped', 
-                'Product Type', 'Pieces per Carton', 'Date Ordered', 'Price'
-            }
-            missing_cols = required_cols - set(df.columns)
-            
-            if missing_cols:
-                st.error(f"Missing columns: {', '.join(missing_cols)}")
-                st.info("Your file must contain these exact column names:")
-                st.code(", ".join(required_cols))
+            # Validate columns
+            is_valid, validation_result = validate_columns(df)
+            if not is_valid:
+                st.error(validation_result)
+                
+                # Show detailed column comparison
+                with st.expander("🔍 Detailed Column Analysis", expanded=True):
+                    st.subheader("Column Matching Report")
+                    cols = st.columns(2)
+                    
+                    with cols[0]:
+                        st.markdown("**Required Columns**")
+                        for req_col in sorted(REQUIRED_COLUMNS):
+                            st.write(req_col)
+                    
+                    with cols[1]:
+                        st.markdown("**Your Columns**")
+                        for req_col in sorted(REQUIRED_COLUMNS):
+                            actual_col = next(
+                                (col for col in df.columns 
+                                 if col.strip().lower() == req_col.strip().lower()),
+                                None
+                            )
+                            if actual_col:
+                                st.markdown(f"<span class='column-match'>{actual_col} ✔</span>", 
+                                           unsafe_allow_html=True)
+                            else:
+                                st.markdown(f"<span class='column-mismatch'>MISSING ❌</span>", 
+                                           unsafe_allow_html=True)
+                
                 return
             
             # Data cleaning
@@ -196,8 +261,8 @@ def main():
             
             # Show data summary
             st.success(f"✅ Successfully loaded {len(df)} records")
-            with st.expander("🔍 View Raw Data", expanded=False):
-                st.dataframe(df.head())
+            with st.expander("🔍 View Raw Data Sample", expanded=False):
+                st.dataframe(df.head(3))
                 st.write(f"Date range: {df['Date Ordered'].min().date()} to {df['Date Ordered'].max().date()}")
             
             # Process data
@@ -206,26 +271,26 @@ def main():
             trend_metrics = calculate_trends(df)
             
             # Display metrics
-            st.header("Key Metrics")
+            st.header("Key Performance Indicators")
             
             cols = st.columns(3)
             with cols[0]:
-                st.subheader("Revenue")
+                st.subheader("💰 Revenue")
                 for metric in revenue_metrics[:3]:
                     st.markdown(f'<div class="metric-box">{metric}</div>', unsafe_allow_html=True)
             
             with cols[1]:
-                st.subheader("Products")
+                st.subheader("📦 Products")
                 for metric in product_metrics[:3]:
                     st.markdown(f'<div class="metric-box">{metric}</div>', unsafe_allow_html=True)
             
             with cols[2]:
-                st.subheader("Trends")
+                st.subheader("📈 Trends")
                 for metric in trend_metrics:
                     st.markdown(f'<div class="metric-box">{metric}</div>', unsafe_allow_html=True)
             
             # Show detailed metrics
-            with st.expander("📋 Detailed Metrics", expanded=False):
+            with st.expander("📋 Detailed Metrics Breakdown", expanded=False):
                 st.write("### Revenue Details")
                 for metric in revenue_metrics[3:]:
                     st.markdown(f'- {metric}')
@@ -238,22 +303,24 @@ def main():
             display_visualizations(df)
             
             # Data export
+            st.divider()
             st.download_button(
-                label="📥 Download Processed Data (CSV)",
+                label="📥 Download Full Analysis (CSV)",
                 data=df.to_csv(index=False).encode('utf-8'),
-                file_name='processed_sales_data.csv',
-                mime='text/csv'
+                file_name='sales_analysis_full.csv',
+                mime='text/csv',
+                use_container_width=True
             )
     
     except Exception as e:
         st.error(f"""
-        ❌ Error processing file:
+        ❌ Critical processing error:
         {str(e)}
         
         Please check:
-        1. File is a valid Excel document
-        2. Contains all required columns
-        3. Has numeric values in Qty Shipped and Price columns
+        1. File is not password protected
+        2. Contains valid numeric data in Qty and Price columns
+        3. Has properly formatted dates
         """)
 
 if __name__ == "__main__":
