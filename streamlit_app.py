@@ -22,9 +22,14 @@ def analyze_columns(df):
     date_cols = [c for c in cols if any(kw in c for kw in ['date', 'time', 'day', 'month'])]
     analysis['date_col'] = date_cols[0] if date_cols else None
     
-    # Detect product info
-    product_cols = [c for c in cols if any(kw in c for kw in ['product', 'item', 'sku', 'part'])]
-    analysis['product_col'] = product_cols[0] if product_cols else None
+    # Detect product info - prioritize part number if exists
+    part_cols = [c for c in cols if any(kw in c for kw in ['part', 'sku', 'model'])]
+    product_cols = [c for c in cols if any(kw in c for kw in ['product', 'item', 'name'])]
+    analysis['product_col'] = part_cols[0] if part_cols else (product_cols[0] if product_cols else None)
+    
+    # Detect order info
+    order_cols = [c for c in cols if any(kw in c for kw in ['order', 'po', 'transaction'])]
+    analysis['order_col'] = order_cols[0] if order_cols else None
     
     return analysis
 
@@ -42,18 +47,41 @@ def auto_generate_insights(df, col_map):
             
             # Revenue by product if available
             if col_map['product_col']:
-                product_rev = processed_df.groupby(col_map['product_col'])['revenue'].sum()
+                product_rev = (processed_df.groupby(col_map['product_col'])['revenue']
+                             .sum()
+                             .sort_values(ascending=False)
+                             .reset_index())
+                product_rev.columns = ['Product', 'Revenue']
+                
                 insights.append("\nRevenue by Product:")
-                for product, rev in product_rev.items():
-                    insights.append(f"- {product}: ${rev:,.2f}")
+                for _, row in product_rev.iterrows():
+                    insights.append(f"- {row['Product']}: ${row['Revenue']:,.2f}")
+                
+                # Add interactive product revenue visualization
+                st.subheader("Top Products by Revenue")
+                st.bar_chart(product_rev.set_index('Product').head(10))
+                
+                # Add download button for product revenue data
+                st.download_button(
+                    "Download Product Revenue Data",
+                    product_rev.to_csv(index=False),
+                    "product_revenue.csv",
+                    "text/csv"
+                )
         
         # Time trends if date available
         if col_map['date_col']:
             try:
                 processed_df['date'] = pd.to_datetime(processed_df[col_map['date_col']])
-                monthly = processed_df.resample('M', on='date')['revenue'].sum()
+                monthly = processed_df.resample('M', on='date')['revenue'].sum().reset_index()
+                monthly.columns = ['Month', 'Revenue']
+                
                 insights.append("\nMonthly Revenue Trend:")
                 insights.append(monthly.to_string())
+                
+                st.subheader("Monthly Revenue Trend")
+                st.line_chart(monthly.set_index('Month'))
+                
             except Exception as e:
                 insights.append(f"\nCould not analyze trends: {str(e)}")
                 
@@ -71,30 +99,42 @@ def main():
     if uploaded_file:
         try:
             df = pd.read_excel(uploaded_file, engine='openpyxl')
-            st.success(f"File loaded successfully with {len(df)} rows")
+            st.success(f"✅ File loaded successfully with {len(df)} records")
             
             # Auto-detect columns
             col_map = analyze_columns(df)
             
             st.subheader("Detected Columns:")
-            st.write(col_map)
+            st.json({k:v for k,v in col_map.items() if v is not None})
+            
+            if not col_map['quantity_col'] or not col_map['price_col']:
+                st.error("Could not find both quantity and price columns needed for revenue calculation")
+                return
             
             # Generate and display insights
             insights, processed_df = auto_generate_insights(df, col_map)
             
-            st.subheader("Generated Insights")
+            st.subheader("Key Insights")
             for insight in insights:
-                st.write(insight)
+                if insight.startswith('\n'):
+                    st.write(insight[1:])
+                else:
+                    st.write(insight)
                 
             # Show processed data
-            with st.expander("View Processed Data"):
+            with st.expander("🔍 View Detailed Data", expanded=False):
                 st.dataframe(processed_df.head())
                 
-            # Download results
+                # Show column statistics
+                st.write("Column Statistics:")
+                st.write(processed_df.describe())
+                
+            # Download full results
             st.download_button(
-                "Download Analysis",
+                "📥 Download Full Analysis",
                 processed_df.to_csv(index=False),
-                "sales_analysis.csv"
+                "complete_sales_analysis.csv",
+                "text/csv"
             )
             
         except Exception as e:
