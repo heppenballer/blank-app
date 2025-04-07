@@ -2,6 +2,10 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
+# Initialize session state for view mode
+if 'show_graphs' not in st.session_state:
+    st.session_state.show_graphs = True
+
 def analyze_columns(df):
     """Automatically detect and analyze available columns."""
     analysis = {}
@@ -106,7 +110,7 @@ def generate_monthly_insights(monthly_df):
     insights.append(
         f"Revenue varies significantly by month, peaking in {best_month['Month']} "
         f"and dropping in {worst_month['Month']}. "
-        f"That's a difference of {monthly_diff:.2f} in revenue. Action items:\n"
+        f"That's a difference of {monthly_diff:,.2f} in revenue. Action items:\n"
         "- Plan inventory and staffing for peak periods\n"
         "- Develop off-season promotions to smooth demand\n"
         "- Analyze causes of seasonal fluctuations"
@@ -161,10 +165,11 @@ def auto_generate_insights(df, col_map):
                 product_insights = generate_product_insights(product_rev)
                 insights.extend(product_insights)
                 
-                # Display top products
-                st.subheader("Top 25 Products by Revenue")
-                st.dataframe(product_rev.style.format({'Revenue': '${:,.2f}'}))
-                st.bar_chart(product_rev.set_index('Product'))
+                # Display top products (only if graphs are enabled)
+                if st.session_state.show_graphs:
+                    st.subheader("Top 25 Products by Revenue")
+                    st.dataframe(product_rev.style.format({'Revenue': '${:,.2f}'}))
+                    st.bar_chart(product_rev.set_index('Product'))
             
             # Monthly insights
             if col_map['date_col']:
@@ -182,10 +187,11 @@ def auto_generate_insights(df, col_map):
                 monthly_insights = generate_monthly_insights(monthly.copy())
                 insights.extend(monthly_insights)
                 
-                # Display monthly trends
-                st.subheader("Monthly Revenue Trend")
-                st.dataframe(monthly_display)
-                st.line_chart(monthly.set_index('Month'))
+                # Display monthly trends (only if graphs are enabled)
+                if st.session_state.show_graphs:
+                    st.subheader("Monthly Revenue Trend")
+                    st.dataframe(monthly_display)
+                    st.line_chart(monthly.set_index('Month'))
     
     except Exception as e:
         insights.append(f"Analysis error: {str(e)}")
@@ -225,6 +231,14 @@ def display_insights(insights):
 def main():
     st.set_page_config("Sales Insights Pro", layout="wide")
     st.title("📊 Actionable Sales Analysis")
+    
+    # Toggle button for graphs
+    col1, col2 = st.columns([3, 1])
+    with col2:
+        if st.button("Toggle Graphs"):
+            st.session_state.show_graphs = not st.session_state.show_graphs
+    
+    st.write(f"Graphs are currently {'ON' if st.session_state.show_graphs else 'OFF'}")
     
     uploaded_file = st.file_uploader("Upload Excel File", type=["xlsx", "xls"])
     
