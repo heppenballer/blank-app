@@ -1,37 +1,6 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-import sys
-
-def check_dependencies():
-    """Check for required dependencies and display installation instructions if missing."""
-    missing_deps = []
-    try:
-        import openpyxl
-    except ImportError:
-        missing_deps.append("openpyxl")
-    
-    if missing_deps:
-        st.error(f"""
-        ❌ Missing required packages: {', '.join(missing_deps)}
-        
-        Please install them by running:
-        ```
-        pip install {' '.join(missing_deps)}
-        ```
-        or create a requirements.txt file with:
-        ```
-        streamlit>=1.0
-        pandas>=1.0
-        openpyxl>=3.0
-        ```
-        and then run:
-        ```
-        pip install -r requirements.txt
-        ```
-        """)
-        return False
-    return True
 
 def calculate_revenue_metrics(data):
     """Calculate revenue-related metrics."""
@@ -51,6 +20,7 @@ def calculate_product_metrics(data):
         for _, row in shipped_by_type.iterrows():
             metrics.append(f"- {row['Product Type']}: {row['Qty Shipped']} units")
         
+        # Add average metrics
         avg_by_type = data.groupby('Product Type').agg({'Price': 'mean', 'Qty Shipped': 'mean'}).reset_index()
         metrics.append("\nAverage price and quantity per product type:")
         for _, row in avg_by_type.iterrows():
@@ -87,6 +57,7 @@ def display_visualizations(data):
                 revenue_by_date = data.groupby('Date Ordered')['Total Revenue'].sum().reset_index()
                 st.line_chart(revenue_by_date, x='Date Ordered', y='Total Revenue')
                 
+                # Add monthly breakdown
                 monthly_revenue = data.set_index('Date Ordered')['Total Revenue'].resample('M').sum().reset_index()
                 st.bar_chart(monthly_revenue, x='Date Ordered', y='Total Revenue')
             except Exception as e:
@@ -99,6 +70,7 @@ def display_visualizations(data):
                 shipped_by_type = data.groupby('Product Type')['Qty Shipped'].sum().reset_index()
                 st.bar_chart(shipped_by_type, x='Product Type', y='Qty Shipped')
                 
+                # Add price distribution
                 if 'Price' in data.columns:
                     st.subheader("Price Distribution by Product Type")
                     price_by_type = data.groupby('Product Type')['Price'].mean().reset_index()
@@ -109,10 +81,6 @@ def display_visualizations(data):
 def main():
     # Configure page
     st.set_page_config(page_title="Quantivo Insights", layout="wide")
-    
-    # Check dependencies first
-    if not check_dependencies():
-        st.stop()  # Don't proceed if dependencies are missing
     
     # Custom styling
     st.markdown("""
@@ -126,17 +94,13 @@ def main():
     st.markdown("Upload your sales data to generate automated business insights.")
     
     # File uploader
-    uploaded_file = st.file_uploader("Choose an Excel file", type=["xlsx", "xls"], 
+    uploaded_file = st.file_uploader("Choose an Excel file", type=["xlsx"], 
                                    help="Upload your Team Project Excel file with sales data")
     
     if uploaded_file:
         try:
             with st.spinner('Processing data...'):
-                # Use appropriate engine based on file type
-                if uploaded_file.name.endswith('.xlsx'):
-                    df = pd.read_excel(uploaded_file, engine='openpyxl')
-                else:
-                    df = pd.read_excel(uploaded_file)
+                df = pd.read_excel(uploaded_file)
                 
                 # Generate insights
                 revenue_metrics, df = calculate_revenue_metrics(df)
