@@ -98,18 +98,15 @@ def generate_monthly_insights(monthly_df):
     if len(monthly_df) == 0:
         return ["No monthly revenue data available for analysis"]
     
-    # Ensure we're working with numeric revenue values
-    monthly_df['Revenue'] = monthly_df['Revenue'].astype(float)
-    
     # Best/worst month analysis
     best_month = monthly_df.loc[monthly_df['Revenue'].idxmax()]
     worst_month = monthly_df.loc[monthly_df['Revenue'].idxmin()]
     monthly_diff = best_month['Revenue'] - worst_month['Revenue']
     
     insights.append(
-        f"Revenue varies significantly by month, peaking in {best_month['Month']} (${best_month['Revenue']:,.2f}) "
-        f"and dropping in {worst_month['Month']} (${worst_month['Revenue']:,.2f}). "
-        f"That's a ${monthly_diff:,.2f} difference. Action items:\n"
+        f"Revenue varies significantly by month, peaking in {best_month['Month']} "
+        f"and dropping in {worst_month['Month']}. "
+        f"That's a difference of {monthly_diff:.2f} in revenue. Action items:\n"
         "- Plan inventory and staffing for peak periods\n"
         "- Develop off-season promotions to smooth demand\n"
         "- Analyze causes of seasonal fluctuations"
@@ -195,18 +192,34 @@ def auto_generate_insights(df, col_map):
     
     return insights, processed_df
 
+def format_currency_in_text(text):
+    """Format currency values in text to proper $XX,XXX.XX format"""
+    parts = text.split('$')
+    for i in range(1, len(parts)):
+        num_part = parts[i].split()[0] if ' ' in parts[i] else parts[i]
+        try:
+            num = float(num_part.replace(',', ''))
+            formatted_num = f"${num:,.2f}"
+            parts[i] = parts[i].replace(num_part, formatted_num, 1)
+        except ValueError:
+            continue
+    return '$'.join(parts)
+
 def display_insights(insights):
     """Display insights in an organized way"""
     st.subheader("Key Business Insights")
     with st.expander("View Detailed Recommendations", expanded=True):
         for insight in insights:
+            # Format currency values in the text
+            formatted_insight = format_currency_in_text(insight)
+            
             # Split into main observation and recommendations
-            parts = insight.split("Recommendations:") if "Recommendations:" in insight else insight.split("Action items:")
+            parts = formatted_insight.split("Recommendations:") if "Recommendations:" in formatted_insight else formatted_insight.split("Action items:")
             if len(parts) > 1:
                 st.markdown(f"**{parts[0]}**")
                 st.markdown(f"*Recommendations:* {parts[1]}")
             else:
-                st.info(insight)
+                st.info(formatted_insight)
             st.write("")  # Add spacing
 
 def main():
