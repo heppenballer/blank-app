@@ -67,7 +67,6 @@ def auto_generate_insights(df, col_map):
                     "text/csv"
                 )
         
-        # Rest of your analysis code...
         # Time trends if date available
         if col_map['date_col']:
             try:
@@ -75,11 +74,27 @@ def auto_generate_insights(df, col_map):
                 monthly = processed_df.resample('M', on='date')['revenue'].sum().reset_index()
                 monthly.columns = ['Month', 'Revenue']
                 
-                insights.append("\nMonthly Revenue Trend:")
-                insights.append(monthly.to_string())
+                # Create a formatted version for display
+                monthly_display = monthly.copy()
+                monthly_display['Month'] = monthly_display['Month'].dt.strftime('%Y-%m')
+                monthly_display['Revenue'] = monthly_display['Revenue'].apply(lambda x: f"${x:,.2f}")
                 
+                insights.append("\nMonthly Revenue Trend:")
+                
+                # Display formatted table
                 st.subheader("Monthly Revenue Trend")
+                st.dataframe(monthly_display)
+                
+                # Show line chart with original data
                 st.line_chart(monthly.set_index('Month'))
+                
+                # Add download button for monthly data
+                st.download_button(
+                    "Download Monthly Revenue Data",
+                    monthly.to_csv(index=False),
+                    "monthly_revenue.csv",
+                    "text/csv"
+                )
                 
             except Exception as e:
                 insights.append(f"\nCould not analyze trends: {str(e)}")
@@ -106,6 +121,10 @@ def main():
             st.subheader("Detected Columns:")
             st.json({k:v for k,v in col_map.items() if v is not None})
             
+            if not col_map['quantity_col'] or not col_map['price_col']:
+                st.error("Could not find both quantity and price columns needed for revenue calculation")
+                return
+            
             # Generate and display insights
             insights, processed_df = auto_generate_insights(df, col_map)
             
@@ -119,6 +138,10 @@ def main():
             # Show processed data
             with st.expander("🔍 View Detailed Data", expanded=False):
                 st.dataframe(processed_df.head())
+                
+                # Show column statistics
+                st.write("Column Statistics:")
+                st.write(processed_df.describe())
                 
             # Download full results
             st.download_button(
