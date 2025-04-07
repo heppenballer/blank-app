@@ -27,10 +27,6 @@ def analyze_columns(df):
     product_cols = [c for c in cols if any(kw in c for kw in ['product', 'item', 'name'])]
     analysis['product_col'] = part_cols[0] if part_cols else (product_cols[0] if product_cols else None)
     
-    # Detect order info
-    order_cols = [c for c in cols if any(kw in c for kw in ['order', 'po', 'transaction'])]
-    analysis['order_col'] = order_cols[0] if order_cols else None
-    
     return analysis
 
 def auto_generate_insights(df, col_map):
@@ -45,30 +41,33 @@ def auto_generate_insights(df, col_map):
             total_rev = processed_df['revenue'].sum()
             insights.append(f"Total Revenue: ${total_rev:,.2f}")
             
-            # Revenue by product if available
+            # Revenue by product if available - showing only top 25
             if col_map['product_col']:
                 product_rev = (processed_df.groupby(col_map['product_col'])['revenue']
                              .sum()
                              .sort_values(ascending=False)
-                             .reset_index())
+                             .reset_index()
+                             .head(25))  # Only take top 25 products
+                
                 product_rev.columns = ['Product', 'Revenue']
                 
-                insights.append("\nRevenue by Product:")
+                insights.append("\nTop 25 Products by Revenue:")
                 for _, row in product_rev.iterrows():
                     insights.append(f"- {row['Product']}: ${row['Revenue']:,.2f}")
                 
-                # Add interactive product revenue visualization
-                st.subheader("Top Products by Revenue")
-                st.bar_chart(product_rev.set_index('Product').head(10))
+                # Visualization of top 25 products
+                st.subheader("Top 25 Products by Revenue")
+                st.bar_chart(product_rev.set_index('Product'))
                 
-                # Add download button for product revenue data
+                # Add download button for top products data
                 st.download_button(
-                    "Download Product Revenue Data",
+                    "Download Top 25 Products Data",
                     product_rev.to_csv(index=False),
-                    "product_revenue.csv",
+                    "top_25_products.csv",
                     "text/csv"
                 )
         
+        # Rest of your analysis code...
         # Time trends if date available
         if col_map['date_col']:
             try:
@@ -107,10 +106,6 @@ def main():
             st.subheader("Detected Columns:")
             st.json({k:v for k,v in col_map.items() if v is not None})
             
-            if not col_map['quantity_col'] or not col_map['price_col']:
-                st.error("Could not find both quantity and price columns needed for revenue calculation")
-                return
-            
             # Generate and display insights
             insights, processed_df = auto_generate_insights(df, col_map)
             
@@ -124,10 +119,6 @@ def main():
             # Show processed data
             with st.expander("🔍 View Detailed Data", expanded=False):
                 st.dataframe(processed_df.head())
-                
-                # Show column statistics
-                st.write("Column Statistics:")
-                st.write(processed_df.describe())
                 
             # Download full results
             st.download_button(
